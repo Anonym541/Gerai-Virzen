@@ -7,7 +7,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body class="bg-gray-100 pb-24">
+<body class="bg-gray-100 pb-36">
 
   <!-- Header -->
   <div class="bg-amber-600 text-white p-4 sticky top-0 shadow-md">
@@ -19,7 +19,6 @@
   <div class="p-4 space-y-4">
     <h2 class="font-bold text-gray-700">Daftar Menu</h2>
     
-    <!-- Item 1 -->
     <div class="bg-white p-4 rounded-xl shadow-sm flex justify-between items-center">
       <div>
         <h3 class="font-bold text-gray-800">Es Teh Manis</h3>
@@ -28,7 +27,6 @@
       <button onclick="tambahItem('Es Teh Manis', 5000)" class="bg-amber-600 text-white px-3 py-1.5 rounded-lg text-sm active:scale-95 transition">+ Tambah</button>
     </div>
 
-    <!-- Item 2 -->
     <div class="bg-white p-4 rounded-xl shadow-sm flex justify-between items-center">
       <div>
         <h3 class="font-bold text-gray-800">Kopi Hitam</h3>
@@ -38,22 +36,38 @@
     </div>
   </div>
 
-  <!-- Bar Keranjang Bottom -->
-  <div class="fixed bottom-0 left-0 right-0 bg-white p-4 border-t shadow-lg flex justify-between items-center">
-    <div>
-      <p class="text-xs text-gray-500">Total Pesanan</p>
-      <p id="total-harga" class="text-lg font-bold text-amber-600">Rp 0</p>
+  <!-- Bar Pembayaran & Pesan (Fixed Bottom) -->
+  <div class="fixed bottom-0 left-0 right-0 bg-white p-4 border-t shadow-lg space-y-3">
+    <!-- Pilihan Pembayaran -->
+    <div class="flex items-center justify-between text-sm">
+      <span class="font-semibold text-gray-700">Metode Bayar:</span>
+      <div class="flex gap-4">
+        <label class="flex items-center gap-1 cursor-pointer">
+          <input type="radio" name="metode_bayar" value="CASH" checked class="accent-amber-600">
+          <span class="text-gray-800">Cash / Tunai</span>
+        </label>
+        <label class="flex items-center gap-1 cursor-pointer">
+          <input type="radio" name="metode_bayar" value="QRIS" class="accent-amber-600">
+          <span class="text-gray-800">QRIS</span>
+        </label>
+      </div>
     </div>
-    <button onclick="kirimPesanan()" class="bg-green-600 text-white font-bold px-5 py-2.5 rounded-xl active:scale-95 transition">Pesan Sekarang</button>
+
+    <!-- Total & Button -->
+    <div class="flex justify-between items-center pt-2 border-t">
+      <div>
+        <p class="text-xs text-gray-500">Total Pesanan</p>
+        <p id="total-harga" class="text-lg font-bold text-amber-600">Rp 0</p>
+      </div>
+      <button onclick="kirimPesanan()" class="bg-green-600 text-white font-bold px-5 py-2.5 rounded-xl active:scale-95 transition">Pesan Sekarang</button>
+    </div>
   </div>
 
   <script>
-    // Konfigurasi Supabase Milikmu
     const SUPABASE_URL = 'https://cplkexlzurgzbspkkbap.supabase.co'
     const SUPABASE_KEY = 'sb_publishable_30Zmc6NDgoS_arYtPAEQCQ_KVz2fXDm'
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
 
-    // Deteksi Nomor Meja dari URL (?meja=1)
     const urlParams = new URLSearchParams(window.location.search)
     const noMeja = urlParams.get('meja') || '1'
     document.getElementById('info-meja').innerText = 'Nomor Meja: ' + noMeja
@@ -65,18 +79,21 @@
       keranjang.push({ nama, harga })
       total += harga
       document.getElementById('total-harga').innerText = 'Rp ' + total.toLocaleString('id-ID')
-      alert(nama + ' ditambahkan ke keranjang!')
+      alert(nama + ' ditambahkan!')
     }
 
     async function kirimPesanan() {
       if (keranjang.length === 0) return alert('Keranjang masih kosong!')
+
+      // Ambil metode bayar yang dipilih (CASH / QRIS)
+      const metodeBayar = document.querySelector('input[name="metode_bayar"]:checked').value
 
       const { data, error } = await supabaseClient.from('orders').insert([
         {
           table_number: noMeja,
           items: keranjang,
           total_price: total,
-          payment_method: 'CASH',
+          payment_method: metodeBayar,
           status: 'PENDING'
         }
       ])
@@ -84,7 +101,7 @@
       if (error) {
         alert('Gagal mengirim pesanan: ' + error.message)
       } else {
-        alert('Pesanan berhasil dikirim ke kasir!')
+        alert(`Pesanan berhasil! Silakan bayar via ${metodeBayar} di kasir/meja.`)
         keranjang = []
         total = 0
         document.getElementById('total-harga').innerText = 'Rp 0'
@@ -93,4 +110,3 @@
   </script>
 </body>
 </html>
-  
