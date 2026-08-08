@@ -80,20 +80,32 @@
       container.prepend(card)
     }
 
-    function selesaikanPesanan(id) {
+    // 1. Update status pesanan di Supabase saat tombol Selesai diklik
+    async function selesaikanPesanan(id) {
       const card = document.getElementById(`order-${id}`)
       if (card) card.remove()
 
       if (container.children.length === 0) {
         container.innerHTML = `<p id="pesan-kosong" class="text-slate-500 text-center py-10">Belum ada pesanan masuk...</p>`
       }
+
+      // Kirim perintah update ke database
+      const { error } = await supabaseClient
+        .from('orders')
+        .update({ status: 'COMPLETED' })
+        .eq('id', id)
+
+      if (error) {
+        console.error('Gagal memperbarui status:', error.message)
+      }
     }
 
-    // 1. Ambil Riwayat Pesanan Saat Halaman Di-load / Di-refresh
+    // 2. Ambil HANYA pesanan yang berstatus PENDING saat halaman di-load / di-refresh
     async function muatPesananAwal() {
       const { data, error } = await supabaseClient
         .from('orders')
         .select('*')
+        .eq('status', 'PENDING')
         .order('id', { ascending: true })
 
       if (data && data.length > 0) {
@@ -103,7 +115,7 @@
 
     muatPesananAwal()
 
-    // 2. Dengarkan Pesanan Baru via Realtime Supabase
+    // 3. Dengarkan Pesanan Baru via Realtime Supabase
     supabaseClient
       .channel('public:orders')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, payload => {
