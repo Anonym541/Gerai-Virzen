@@ -15,7 +15,9 @@
       <h1 class="text-xl font-bold text-amber-500">Dashboard Kasir</h1>
       <p class="text-xs text-slate-400">Gerai-Virzen (Real-Time Mode)</p>
     </div>
-    <span class="bg-green-500/20 text-green-400 text-xs px-3 py-1 rounded-full border border-green-500/30">● Live</span>
+    <span class="bg-green-500/20 text-green-400 text-xs px-3 py-1 rounded-full border border-green-500/30 font-medium flex items-center gap-1.5">
+      <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> Live
+    </span>
   </div>
 
   <!-- Container Pesanan -->
@@ -28,23 +30,41 @@
     const SUPABASE_KEY = 'sb_publishable_30Zmc6NDgoS_arYtPAEQCQ_KVz2fXDm'
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
 
+    const container = document.getElementById('daftar-pesanan')
+
     // Fungsi Render Card Pesanan
     function tampilkanPesanan(order) {
       document.getElementById('pesan-kosong')?.remove()
+
+      // Mencegah duplikasi tampilan jika card dengan ID yang sama sudah ada
+      if (document.getElementById(`order-${order.id}`)) return
       
-      const container = document.getElementById('daftar-pesanan')
       const card = document.createElement('div')
-      card.className = "bg-slate-800 border border-slate-700 p-4 rounded-xl shadow-lg transition animate-bounce"
+      card.id = `order-${order.id}`
+      card.className = "bg-slate-800 border border-slate-700 p-4 rounded-xl shadow-lg transition"
       
       let itemHtml = ''
-      order.items.forEach(i => {
-        itemHtml += `<li class="text-sm text-slate-300">${i.nama} x 1 - <span class="text-amber-400">Rp ${i.harga.toLocaleString('id-ID')}</span></li>`
-      })
+      if (Array.isArray(order.items)) {
+        order.items.forEach(i => {
+          itemHtml += `<li class="text-sm text-slate-300 flex justify-between py-0.5">
+            <span>${i.nama}</span>
+            <span class="text-amber-400 font-semibold">Rp ${(i.harga || 0).toLocaleString('id-ID')}</span>
+          </li>`
+        })
+      }
+
+      const metodeBayar = order.payment_method || 'CASH'
+      const isQris = metodeBayar === 'QRIS'
 
       card.innerHTML = `
         <div class="flex justify-between items-start mb-2">
-          <span class="bg-amber-500 text-slate-900 font-bold px-3 py-1 rounded-lg text-sm">Meja ${order.table_number}</span>
-          <span class="text-xs text-slate-400">${new Date(order.created_at).toLocaleTimeString('id-ID')}</span>
+          <div class="flex items-center gap-2">
+            <span class="bg-amber-500 text-slate-900 font-bold px-3 py-1 rounded-lg text-sm">Meja ${order.table_number || '1'}</span>
+            <span class="text-xs font-bold px-2 py-0.5 rounded ${isQris ? 'bg-blue-600 text-white' : 'bg-green-600 text-white'}">
+              ${metodeBayar}
+            </span>
+          </div>
+          <span class="text-xs text-slate-400">${order.created_at ? new Date(order.created_at).toLocaleTimeString('id-ID') : '-'}</span>
         </div>
         <ul class="my-3 space-y-1 border-y border-slate-700/50 py-2">
           ${itemHtml}
@@ -52,15 +72,38 @@
         <div class="flex justify-between items-center mt-3">
           <div>
             <p class="text-xs text-slate-400">Total Bayar</p>
-            <p class="font-bold text-green-400">Rp ${order.total_price.toLocaleString('id-ID')}</p>
+            <p class="font-bold text-green-400 text-base">Rp ${(order.total_price || 0).toLocaleString('id-ID')}</p>
           </div>
-          <button onclick="this.parentElement.parentElement.remove()" class="bg-slate-700 hover:bg-slate-600 text-xs px-3 py-1.5 rounded-lg">Selesai</button>
+          <button onclick="selesaikanPesanan(${order.id})" class="bg-slate-700 hover:bg-slate-600 text-xs px-3 py-1.5 rounded-lg active:scale-95 transition">Selesai</button>
         </div>
       `
       container.prepend(card)
     }
 
-    // Dengarkan Pesanan Baru via Realtime Supabase
+    function selesaikanPesanan(id) {
+      const card = document.getElementById(`order-${id}`)
+      if (card) card.remove()
+
+      if (container.children.length === 0) {
+        container.innerHTML = `<p id="pesan-kosong" class="text-slate-500 text-center py-10">Belum ada pesanan masuk...</p>`
+      }
+    }
+
+    // 1. Ambil Riwayat Pesanan Saat Halaman Di-load / Di-refresh
+    async function muatPesananAwal() {
+      const { data, error } = await supabaseClient
+        .from('orders')
+        .select('*')
+        .order('id', { ascending: true })
+
+      if (data && data.length > 0) {
+        data.forEach(order => tampilkanPesanan(order))
+      }
+    }
+
+    muatPesananAwal()
+
+    // 2. Dengarkan Pesanan Baru via Realtime Supabase
     supabaseClient
       .channel('public:orders')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, payload => {
