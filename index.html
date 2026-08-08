@@ -40,7 +40,7 @@
   <div id="modal-qris" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
     <div class="bg-white p-6 rounded-2xl max-w-sm w-full text-center space-y-4 shadow-2xl">
       <h3 class="font-bold text-lg text-gray-800">Pembayaran QRIS</h3>
-      <p class="text-xs text-gray-500">Scan QRIS di bawah ini. Nominal pembayaran sudah terisi otomatis!</p>
+      <p class="text-xs text-gray-500">Scan QRIS di bawah ini. Nominal sudah otomatis terisi!</p>
       
       <div class="bg-gray-50 p-3 rounded-xl border flex justify-center">
         <img id="gambar-qris" src="" alt="QRIS Dinamis Gerai Virzen" class="w-56 h-56 object-contain rounded-lg">
@@ -51,16 +51,22 @@
         <p id="total-qris" class="text-xl font-bold text-amber-600">Rp 0</p>
       </div>
 
-      <div class="flex gap-2">
-        <button onclick="tutupModal()" class="w-1/2 bg-gray-200 text-gray-700 py-2.5 rounded-xl font-semibold text-sm">Batal</button>
-        <button onclick="prosesSimpanPesanan('QRIS')" class="w-1/2 bg-green-600 text-white py-2.5 rounded-xl font-semibold text-sm">Saya Sudah Bayar</button>
+      <!-- Teks Layanan Dukungan Pembayaran -->
+      <div class="pt-1">
+        <p class="text-[11px] text-gray-500 font-medium mb-1">Mendukung Pembayaran Via:</p>
+        <p class="text-xs font-bold text-gray-700 tracking-wide">
+          Gopay • DANA • OVO • ShopeePay • LinkAja • BCA • Mandiri • BRI • BNI • All M-Banking
+        </p>
+      </div>
+
+      <div class="flex gap-2 pt-2">
+        <button onclick="tutupModal()" class="w-full bg-gray-200 text-gray-700 py-2.5 rounded-xl font-semibold text-sm">Tutup</button>
       </div>
     </div>
   </div>
 
   <!-- Bar Pembayaran & Pesan (Fixed Bottom) -->
   <div class="fixed bottom-0 left-0 right-0 bg-white p-4 border-t shadow-lg space-y-3">
-    <!-- Pilihan Pembayaran -->
     <div class="flex items-center justify-between text-sm">
       <span class="font-semibold text-gray-700">Metode Bayar:</span>
       <div class="flex gap-4">
@@ -75,7 +81,6 @@
       </div>
     </div>
 
-    <!-- Total & Button -->
     <div class="flex justify-between items-center pt-2 border-t">
       <div>
         <p class="text-xs text-gray-500">Total Pesanan</p>
@@ -90,7 +95,6 @@
     const SUPABASE_KEY = 'sb_publishable_30Zmc6NDgoS_arYtPAEQCQ_KVz2fXDm'
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
 
-    // String QRIS Statis Erwin Pebriansyah (Sarolangun)
     const STRING_QRIS_STATIS = "00020101021126610016ID.CO.SHOPEE.WWW01189360091800227613890208227613890303UMI51440014ID.CO.QRIS.WWW0215ID10264873149280303UMI5204597153033605802ID5917Erwin pebriansyah6010SAROLANGUN61053741162070703A01"
 
     const urlParams = new URLSearchParams(window.location.search)
@@ -107,10 +111,8 @@
       alert(nama + ' ditambahkan!')
     }
 
-    // Generator QRIS Dinamis (EMVCo Tag 54 + CRC16)
     function generateDynamicQRIS(qrisStatis, nominal) {
       let qrisBase = qrisStatis.trim();
-      
       if (qrisBase.includes("6304")) {
         qrisBase = qrisBase.substring(0, qrisBase.indexOf("6304"));
       }
@@ -147,10 +149,26 @@
       return hex.padStart(4, '0');
     }
 
-    function tanganiPesanan() {
+    async function tanganiPesanan() {
       if (keranjang.length === 0) return alert('Keranjang masih kosong!')
 
       const metodeBayar = document.querySelector('input[name="metode_bayar"]:checked').value
+
+      // Kirim data pesanan langsung ke Supabase saat tombol ditekan
+      const { data, error } = await supabaseClient.from('orders').insert([
+        {
+          table_number: noMeja,
+          items: keranjang,
+          total_price: total,
+          payment_method: metodeBayar,
+          status: 'PENDING'
+        }
+      ])
+
+      if (error) {
+        alert('Gagal mengirim pesanan: ' + error.message)
+        return
+      }
 
       if (metodeBayar === 'QRIS') {
         const qrisDinamis = generateDynamicQRIS(STRING_QRIS_STATIS, total);
@@ -160,34 +178,20 @@
         document.getElementById('total-qris').innerText = 'Rp ' + total.toLocaleString('id-ID');
         document.getElementById('modal-qris').classList.remove('hidden');
       } else {
-        prosesSimpanPesanan('CASH');
+        alert('Pesanan berhasil dibuat! Silakan bayar tunai di kasir.')
+        resetForm()
       }
     }
 
     function tutupModal() {
       document.getElementById('modal-qris').classList.add('hidden');
+      resetForm()
     }
 
-    async function prosesSimpanPesanan(metode) {
-      const { data, error } = await supabaseClient.from('orders').insert([
-        {
-          table_number: noMeja,
-          items: keranjang,
-          total_price: total,
-          payment_method: metode,
-          status: 'PENDING'
-        }
-      ])
-
-      if (error) {
-        alert('Gagal mengirim pesanan: ' + error.message)
-      } else {
-        tutupModal()
-        alert('Pesanan berhasil dibuat! Silakan tunggu hidangan disajikan.')
-        keranjang = []
-        total = 0
-        document.getElementById('total-harga').innerText = 'Rp 0'
-      }
+    function resetForm() {
+      keranjang = []
+      total = 0
+      document.getElementById('total-harga').innerText = 'Rp 0'
     }
   </script>
 </body>
