@@ -36,6 +36,28 @@
     </div>
   </div>
 
+  <!-- Modal Popup QRIS Dinamis -->
+  <div id="modal-qris" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+    <div class="bg-white p-6 rounded-2xl max-w-sm w-full text-center space-y-4 shadow-2xl">
+      <h3 class="font-bold text-lg text-gray-800">Pembayaran QRIS</h3>
+      <p class="text-xs text-gray-500">Scan QRIS di bawah ini. Nominal pembayaran sudah terisi otomatis!</p>
+      
+      <div class="bg-gray-50 p-3 rounded-xl border flex justify-center">
+        <img id="gambar-qris" src="" alt="QRIS Dinamis Gerai Virzen" class="w-56 h-56 object-contain rounded-lg">
+      </div>
+
+      <div class="bg-amber-50 p-3 rounded-lg border border-amber-200">
+        <p class="text-xs text-amber-800">Total Pembayaran:</p>
+        <p id="total-qris" class="text-xl font-bold text-amber-600">Rp 0</p>
+      </div>
+
+      <div class="flex gap-2">
+        <button onclick="tutupModal()" class="w-1/2 bg-gray-200 text-gray-700 py-2.5 rounded-xl font-semibold text-sm">Batal</button>
+        <button onclick="prosesSimpanPesanan('QRIS')" class="w-1/2 bg-green-600 text-white py-2.5 rounded-xl font-semibold text-sm">Saya Sudah Bayar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Bar Pembayaran & Pesan (Fixed Bottom) -->
   <div class="fixed bottom-0 left-0 right-0 bg-white p-4 border-t shadow-lg space-y-3">
     <!-- Pilihan Pembayaran -->
@@ -59,7 +81,7 @@
         <p class="text-xs text-gray-500">Total Pesanan</p>
         <p id="total-harga" class="text-lg font-bold text-amber-600">Rp 0</p>
       </div>
-      <button onclick="kirimPesanan()" class="bg-green-600 text-white font-bold px-5 py-2.5 rounded-xl active:scale-95 transition">Pesan Sekarang</button>
+      <button onclick="tanganiPesanan()" class="bg-green-600 text-white font-bold px-5 py-2.5 rounded-xl active:scale-95 transition">Pesan Sekarang</button>
     </div>
   </div>
 
@@ -67,6 +89,9 @@
     const SUPABASE_URL = 'https://cplkexlzurgzbspkkbap.supabase.co'
     const SUPABASE_KEY = 'sb_publishable_30Zmc6NDgoS_arYtPAEQCQ_KVz2fXDm'
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+
+    // String QRIS Statis Erwin Pebriansyah (Sarolangun)
+    const STRING_QRIS_STATIS = "00020101021126610016ID.CO.SHOPEE.WWW01189360091800227613890208227613890303UMI51440014ID.CO.QRIS.WWW0215ID10264873149280303UMI5204597153033605802ID5917Erwin pebriansyah6010SAROLANGUN61053741162070703A01"
 
     const urlParams = new URLSearchParams(window.location.search)
     const noMeja = urlParams.get('meja') || '1'
@@ -82,18 +107,74 @@
       alert(nama + ' ditambahkan!')
     }
 
-    async function kirimPesanan() {
+    // Generator QRIS Dinamis (EMVCo Tag 54 + CRC16)
+    function generateDynamicQRIS(qrisStatis, nominal) {
+      let qrisBase = qrisStatis.trim();
+      
+      if (qrisBase.includes("6304")) {
+        qrisBase = qrisBase.substring(0, qrisBase.indexOf("6304"));
+      }
+
+      const nominalStr = nominal.toString();
+      const tag54 = '54' + nominalStr.length.toString().padStart(2, '0') + nominalStr;
+      const tag58Index = qrisBase.indexOf('5802ID');
+      
+      let qrisWithAmount = qrisBase;
+      if (tag58Index !== -1) {
+        qrisWithAmount = qrisBase.slice(0, tag58Index) + tag54 + qrisBase.slice(tag58Index);
+      } else {
+        qrisWithAmount = qrisBase + tag54;
+      }
+
+      qrisWithAmount += '6304';
+      const crc = hitungCRC16(qrisWithAmount);
+      return qrisWithAmount + crc;
+    }
+
+    function hitungCRC16(str) {
+      let crc = 0xFFFF;
+      for (let c = 0; c < str.length; c++) {
+        crc ^= str.charCodeAt(c) << 8;
+        for (let i = 0; i < 8; i++) {
+          if ((crc & 0x8000) !== 0) {
+            crc = (crc << 1) ^ 0x1021;
+          } else {
+            crc = crc << 1;
+          }
+        }
+      }
+      let hex = (crc & 0xFFFF).toString(16).toUpperCase();
+      return hex.padStart(4, '0');
+    }
+
+    function tanganiPesanan() {
       if (keranjang.length === 0) return alert('Keranjang masih kosong!')
 
-      // Ambil metode bayar yang dipilih (CASH / QRIS)
       const metodeBayar = document.querySelector('input[name="metode_bayar"]:checked').value
 
+      if (metodeBayar === 'QRIS') {
+        const qrisDinamis = generateDynamicQRIS(STRING_QRIS_STATIS, total);
+        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrisDinamis)}`;
+        
+        document.getElementById('gambar-qris').src = qrUrl;
+        document.getElementById('total-qris').innerText = 'Rp ' + total.toLocaleString('id-ID');
+        document.getElementById('modal-qris').classList.remove('hidden');
+      } else {
+        prosesSimpanPesanan('CASH');
+      }
+    }
+
+    function tutupModal() {
+      document.getElementById('modal-qris').classList.add('hidden');
+    }
+
+    async function prosesSimpanPesanan(metode) {
       const { data, error } = await supabaseClient.from('orders').insert([
         {
           table_number: noMeja,
           items: keranjang,
           total_price: total,
-          payment_method: metodeBayar,
+          payment_method: metode,
           status: 'PENDING'
         }
       ])
@@ -101,7 +182,8 @@
       if (error) {
         alert('Gagal mengirim pesanan: ' + error.message)
       } else {
-        alert(`Pesanan berhasil! Silakan bayar via ${metodeBayar} di kasir/meja.`)
+        tutupModal()
+        alert('Pesanan berhasil dibuat! Silakan tunggu hidangan disajikan.')
         keranjang = []
         total = 0
         document.getElementById('total-harga').innerText = 'Rp 0'
